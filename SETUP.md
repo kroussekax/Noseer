@@ -41,6 +41,62 @@ cd noseer
 cp .env.example .env
 ```
 
+### Configure the AI (OpenRouter)
+
+canoTe uses [OpenRouter](https://openrouter.ai) as the vision-language model provider.
+
+1. Go to the OpenRouter dashboard: https://openrouter.ai
+2. Sign in (GitHub login works)
+3. Create an API key: https://openrouter.ai/keys → "Create Key"
+4. Copy the key (`sk-or-...`)
+5. Put it in your local `.env`:
+
+```env
+OPENROUTER_API_KEY=sk-or-your-key-here
+```
+
+The default model is already set and should be left as-is unless you intentionally want another vision model:
+
+```env
+AI_MODEL=qwen/qwen3.8-27b:free
+```
+
+Notes:
+
+- The `OPENROUTER_API_KEY` is **server-side only** — it is never sent to the frontend.
+- The `:free` suffix is part of the model id. Free models are rate-limited; the API retries automatically and returns HTTP 429 when retries are exhausted.
+- Any OpenRouter model that supports **image input** works here.
+
+### Start with Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+This starts: PostgreSQL (`db`), the FastAPI backend (`api`), the frontend (`frontend`), and the Caddy reverse proxy (`caddy`, exposed on port 3001).
+
+### Verify the deployment
+
+1. Check that all containers are healthy:
+
+```bash
+docker compose ps
+```
+
+2. Check the API health endpoint:
+
+```bash
+curl http://localhost:3001/api/health
+```
+
+You should get:
+
+```json
+{"status":"ok"}
+```
+
+3. Test document processing: open `http://localhost:3001`, register an account, tap the camera icon, take a photo of some notes, and tap **"Analyze with AI"**. You should see the AI suggestion (notebook, chapter, title, extracted text) before anything is saved. If analysis fails, check `docker compose logs api` — common causes are a missing/invalid `OPENROUTER_API_KEY` or rate limiting on free models.
+
 ---
 
 ## 2. Server Setup (local, no Docker)
@@ -113,8 +169,8 @@ SECRET_KEY=YOUR_RANDOM_SECRET
 ALLOWED_ORIGINS=http://localhost:5173
 SECURE_COOKIES=false
 UPLOAD_DIR=./uploads
-OPENROUTER_API_KEY=sk-or-your-key-here
-GEMINI_MODEL=google/gemini-2.0-flash-exp
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+AI_MODEL=qwen/qwen3.8-27b:free
 ```
 
 Generate the secret:

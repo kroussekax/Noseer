@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: Path = Path("./uploads")
     MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024  # 10 MB
     OPENROUTER_API_KEY: str = ""
-    GEMINI_MODEL: str = "google/gemini-2.0-flash-001"
+    AI_MODEL: str = "qwen/qwen3.8-27b:free"
 
     @property
     def origins_list(self) -> list[str]:

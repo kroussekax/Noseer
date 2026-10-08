@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .routers import auth, notebooks, chapters, pages, uploads, ai, ai
+from .routers import auth, notebooks, chapters, pages, uploads, ai
 
 app = FastAPI(title="Tactile Notes API", version="1.0.0")
 
@@ -26,7 +26,6 @@ app.include_router(notebooks.router, prefix="/api")
 app.include_router(chapters.router,  prefix="/api")
 app.include_router(pages.router,     prefix="/api")
 app.include_router(uploads.router,   prefix="/api")
-app.include_router(ai.router,        prefix="/api")
 app.include_router(ai.router,        prefix="/api")
 
 # --- Static file serving for uploads ---

@@ -13,8 +13,8 @@ from ..deps import get_current_user
 from ..models import User, Notebook, Chapter, Page, Upload
 from ..schemas import AIAnalysis, AIAnalyzeResponse, AIConfirmRequest, PageOut
 from ..storage import save_upload, delete_upload
-from ..services.ai import AIService
-from ..services.gemini import GeminiService
+from ..services.ai import AIService, AIServiceError
+from ..services.openrouter import OpenRouterService
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ router = APIRouter(tags=["ai"])
 def get_ai_service() -> AIService | None:
     """Return AI service if configured, None otherwise."""
     try:
-        return GeminiService()
+        return OpenRouterService()
     except RuntimeError:
         return None
 
@@ -99,6 +99,13 @@ async def analyze_image(
             notebook_names=notebook_names,
             chapter_names=chapter_names if chapter_names else None,
         )
+    except AIServiceError as e:
+        logger.error(f"AI analysis failed: {e}")
+        # Clean up the upload record on failure
+        delete_upload(upload.storage_key)
+        db.delete(upload)
+        db.commit()
+        raise HTTPException(e.status_code, str(e)) from e
     except Exception as e:
         logger.error(f"AI analysis failed: {e}")
         # Clean up the upload record on failure

@@ -1,8 +1,21 @@
 """
 AI service abstraction.
-Allows swapping Gemini for another provider without rewriting the API layer.
+Allows swapping the VLM provider (e.g. OpenRouter) without rewriting the API layer.
 """
 from abc import ABC, abstractmethod
+
+
+class AIServiceError(Exception):
+    """
+    Raised when the upstream AI provider fails.
+
+    The message is safe to return to the client — it must never contain
+    API keys or other secrets.
+    """
+
+    def __init__(self, message: str, status_code: int = 502):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class AIService(ABC):
