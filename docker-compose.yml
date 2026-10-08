@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tactile
+      POSTGRES_USER: tactile
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tactile}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tactile -d tactile']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./canoTe-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://tactile:${DB_PASSWORD:-tactile}@db:5432/tactile
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-at-least-32-chars}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001,http://localhost:3000,http://localhost:5173}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      UPLOAD_DIR: /uploads
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-google/gemini-2.0-flash-exp}
+    volumes:
+      - uploads_data:/uploads
+    ports:
+      - '8000:8000'
+
+  frontend:
+    build:
+      context: ./canoTe
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - '80'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - api
+    ports:
+      - '${FRONTEND_PORT:-3001}:3001'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  uploads_data:
+  canoTe_dist:
+  caddy_data:
+  caddy_config:

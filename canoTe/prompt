@@ -1,0 +1,146 @@
+There is currently a camera bug that needs to be fixed.
+
+When the application is opened from another device on the same Wi-Fi network or through Tailscale/VPN, the camera fails with:
+
+"Camera API not supported or requires a secure context (HTTPS/localhost)"
+
+The "Grant / Retry Access" button also does nothing.
+
+The app uses the browser camera API (`navigator.mediaDevices.getUserMedia()`).
+
+### Important
+
+Do NOT try to solve this by simply repeatedly calling `getUserMedia()` or by pretending permission was granted.
+
+The root issue is that browser camera access requires a secure context.
+
+The application must be designed to work correctly when accessed from another device.
+
+Development/deployment should support:
+
+localhost
+↓
+local development
+
+Tailscale HTTPS hostname
+↓
+testing from phones/other devices
+
+Public HTTPS domain
+↓
+future public deployment
+
+Do NOT make the camera implementation depend specifically on a Tailscale IP address.
+
+### Camera implementation
+
+Create a small camera utility/module responsible for:
+
+* checking whether the browser supports `navigator.mediaDevices.getUserMedia`
+* checking whether the current page is a secure context
+* requesting camera permission
+* starting the camera stream
+* stopping the camera stream
+* handling permission denial
+* handling browsers/devices without camera support
+* displaying a useful error to the user
+
+Use something conceptually like:
+
+if (!window.isSecureContext) {
+// Tell the user that HTTPS is required.
+}
+
+if (!navigator.mediaDevices?.getUserMedia) {
+// Browser does not support camera access.
+}
+
+const stream = await navigator.mediaDevices.getUserMedia({
+video: true
+});
+
+Do not silently fail.
+
+If camera access is blocked because the app is not running in a secure context, the UI should explicitly tell the user:
+
+"Camera access requires HTTPS. Open the app using its HTTPS address."
+
+The Retry button should actually retry `getUserMedia()` when retrying makes sense, but it must not claim that permission was granted when the browser rejected the request.
+
+### Development server
+
+Make sure the Vite development setup can be served over HTTPS when I need to test the camera from another device.
+
+I currently use Tailscale, so explain how I can access the Vite app through an HTTPS Tailscale hostname during development.
+
+Do not require me to expose the development server directly to the public Internet.
+
+### Future deployment
+
+Keep the frontend independent of the deployment method.
+
+The same camera code should work with:
+
+* localhost during development
+* HTTPS through Tailscale
+* HTTPS through a public domain
+
+Also explain any Vite configuration and Tailscale/reverse-proxy configuration required.
+
+Do not modify the visual design unnecessarily.
+
+implement:
+1. account system and of which will hhave a server-side storage of notes.
+The app's note hierarchy is:
+
+User
+└── Notebook
+└── Chapter
+└── Page
+
+A Notebook is a broad collection and can represent anything, such as:
+
+* Physics
+* Math
+* Restaurant bills
+* Budgeting
+
+A Chapter groups related pages within a notebook.
+
+Examples:
+
+Physics
+├── Kinematics
+│   ├── Velocity
+│   ├── Acceleration
+│   └── Projectile Motion
+└── Dynamics
+├── Newton's Laws
+└── Friction
+
+Please model this as a relational hierarchy using separate tables:
+
+users
+notebooks
+chapters
+pages
+
+Relationships:
+
+notebooks.user_id → users.id
+chapters.notebook_id → notebooks.id
+pages.chapter_id → chapters.id
+
+Notebooks, chapters, and pages should have their own IDs.
+
+Chapters and pages should have a `position`/ordering field so the frontend can support reordering.
+
+Each level should have appropriate timestamps.
+
+The backend must enforce ownership. A user must only be able to access notebooks belonging to their account, and therefore only the chapters/pages underneath those notebooks.
+
+Do not trust a user_id supplied by the frontend. Determine the authenticated user from the authentication/session system.
+
+For now, page content can simply be stored as a TEXT field. Keep the schema simple and leave room to migrate to a richer block/JSON-based editor later.
+
+Please show me the resulting SQL schema and explain the relationships before implementing it.

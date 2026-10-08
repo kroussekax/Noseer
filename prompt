@@ -1,0 +1,34 @@
+i want you to understand this code base and do the following:
+1. make 4 pages: notes, camera, gallery, and settings. each page correspond to each button div inside the island div but for settting, its the @ symbol. 
+2. the app is divided into some section.
+in general, all of them have the following:
+	a. notifbar: which has teh setting icon and the ! for some notification which may include hints or acccount related news. 
+	b. main page: is for the content; 
+		1. camera page has the camera view of the device,
+		2. notes has a list of all notes displayed in grid view.
+		3. gallery has the raw images from each picture taken.
+		4. settings has available settings in list view. 
+			list of options:
+			1. accent color
+			2. dark mode / light mode
+			3. aspect ratio of camera
+			4. over the top animations (toggle on or off)
+	c. island: a set of buttons for navigating the app. they are like this in order: notes. camera, gallery, and search. for search, i dont want it to be present in the camera page. so when in it, just make the island has 3 buttons.
+3. Styles:	a. generally, i want the app to be minimalist. add the flexibility to custommize the accent color in the material design lanugage and make it almost monochromee by default. 
+			b. camera page: i want the whole page to be full of camera view if the aspect ratio is set to the screen aspect ratio - thus making the island, and capture button floating. if it isnt the screen aspect ratio, then surround the non camera view space with a dark color relative to the accent color.
+			c. notes page: divide the catagorizations of notes into: catagory and notebook. all of them are displayed in grid view. each item (both categ and notebook) will have a sticker peeling animation when opened (this animation is an over to the top one)
+			d. gallery page: gallery will have msotly the same ui ux as the note page, only different is there is no categorizations of the pictures. jsut order them in terem of newest or oldest
+
+
+
+add:
+a .md explaining: 
+a. how to set this project up with the two dir (api n frontend) -> get the dir on machine. run the backend n frontend servers. make sure both r in the same network interface in some sort that allows https at the very least for the front end (like through tailscale, with its tailnet and magicdns system)
+b. how to use the app -> the workflow: you take a pic, the pic is procsesed by ai, and get catagorised and you can edit the note from there. 
+
+b. categorization process -> the pic taken, ai process. 
+	-ai should process the image and seperate texts n images. from there, both should be stored in the server. (make sure you are aware that the whole thing is divided into two dir, backend n frontend)
+	-categorization should be done like this -> when pic is taken, the ai checks if there are aplicable notebook for said image by the name of the notebook. if no, create a new one by asking the user for a name of it with suggested name. otherwise, search for a chapter that's already in the notebook that seems to be indiscussion of the picture taken, if there is one, ask the user if he/she wishes for the page(rn its a pic) to be in said chapter while also giving the user the option to manually select chapters or create more.
+
++). i tried adding a chapter and pages in it with the current system, but after reloading, it didnt save it. the only thing saved is the notebok without its chapters / pages. troubleshoot n fix this
+

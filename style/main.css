@@ -1,0 +1,527 @@
+/* Noseer Core Architecture & Global Layout */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--md-bg-base);
+  color: var(--md-text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* App Viewport Container (supports responsive device simulation) */
+#app-root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--md-bg-base);
+  transition: max-width 0.3s cubic-bezier(0.16, 1, 0.3, 1), margin 0.3s ease;
+}
+
+/* Device Viewport Simulation Modes */
+body.sim-mobile #app-root {
+  max-width: 420px;
+  height: 880px;
+  max-height: 94vh;
+  margin: 3vh auto;
+  border-radius: 36px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--md-border-strong);
+}
+
+body.sim-tablet #app-root {
+  max-width: 768px;
+  height: 920px;
+  max-height: 95vh;
+  margin: 2.5vh auto;
+  border-radius: 28px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--md-border-strong);
+}
+
+/* -------------------------------------------------------------
+   Notification Bar (Top Minimal Header)
+   ------------------------------------------------------------- */
+.notifbar {
+  height: 54px;
+  min-height: 54px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--md-glass-bg);
+  backdrop-filter: var(--md-glass-blur);
+  -webkit-backdrop-filter: var(--md-glass-blur);
+  border-bottom: 1px solid var(--md-border-subtle);
+  z-index: 100;
+  position: relative;
+}
+
+.notifbar-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.top-bar-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--md-text-primary);
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+/* Centered heading for mobile view */
+body.sim-mobile .top-bar-title,
+@media (max-width: 600px) {
+  .notifbar {
+    justify-content: center;
+  }
+  .notifbar-left {
+    justify-content: center;
+  }
+  .top-bar-title {
+    text-align: center;
+    font-size: 20px;
+  }
+  .notifbar-actions {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+
+.notifbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notif-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--md-text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  font-size: 16px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.notif-btn:hover {
+  background: var(--md-surface-2);
+  color: var(--md-text-primary);
+  border-color: var(--md-border-subtle);
+}
+
+.notif-btn.active {
+  background: var(--md-surface-3);
+  color: var(--md-text-primary);
+}
+
+.notif-unread-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--md-accent-primary);
+  box-shadow: 0 0 6px var(--md-accent-glow);
+}
+
+/* -------------------------------------------------------------
+   Main App Content Views
+   ------------------------------------------------------------- */
+.views-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: calc(100% - 48px);
+}
+
+.app-view {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 96px; /* Spacing for floating navigation island */
+  opacity: 0;
+  transform: scale(0.99);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.app-view.active {
+  display: flex;
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Special full-canvas view for Camera */
+#view-camera {
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+/* Special full layout for Note Editor */
+#view-editor {
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+/* -------------------------------------------------------------
+   Floating Navigation Island
+   ------------------------------------------------------------- */
+.nav-island-wrapper {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.island-main {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: var(--md-glass-bg);
+  border: 1px solid var(--md-glass-border);
+  backdrop-filter: var(--md-glass-blur);
+  -webkit-backdrop-filter: var(--md-glass-blur);
+  border-radius: 9999px;
+  box-shadow: var(--md-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.island-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  background: transparent;
+  border: none;
+  color: var(--md-text-secondary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.island-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  transition: transform 0.2s ease;
+}
+
+.island-btn:hover {
+  color: var(--md-text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.island-btn:active svg {
+  transform: scale(0.9);
+}
+
+/* Subtle, minimalist active highlight */
+.island-btn.active {
+  color: var(--md-text-primary);
+  background: var(--md-surface-3);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), inset 0 0 0 1px var(--md-border-subtle);
+}
+
+.island-btn.active .nav-dot-active {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--md-accent-primary);
+  box-shadow: 0 0 6px var(--md-accent-glow);
+}
+
+/* Island Separator Dot */
+.island-separator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--md-text-muted);
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Separated Search Button */
+.island-search-btn {
+  pointer-events: auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--md-glass-bg);
+  border: 1px solid var(--md-glass-border);
+  backdrop-filter: var(--md-glass-blur);
+  -webkit-backdrop-filter: var(--md-glass-blur);
+  box-shadow: var(--md-shadow-md);
+  color: var(--md-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.25, 0.64, 1);
+}
+
+.island-search-btn:hover {
+  transform: scale(1.06);
+  border-color: var(--md-accent-border);
+  box-shadow: var(--md-shadow-md), 0 0 14px var(--md-accent-glow);
+}
+
+.island-search-btn:active {
+  transform: scale(0.94);
+}
+
+.island-search-btn svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
+/* On Camera page: Search is hidden completely */
+.nav-island-wrapper.on-camera .island-separator,
+.nav-island-wrapper.on-camera .island-search-btn {
+  opacity: 0;
+  transform: scale(0.5);
+  pointer-events: none;
+  display: none;
+}
+
+/* -------------------------------------------------------------
+   Notification Drawer
+   ------------------------------------------------------------- */
+.notif-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 800;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.notif-drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notif-drawer {
+  position: fixed;
+  top: 56px;
+  right: 18px;
+  width: 360px;
+  max-width: calc(100vw - 36px);
+  background: var(--md-surface-1);
+  border: 1px solid var(--md-border-strong);
+  border-radius: 20px;
+  box-shadow: var(--md-shadow-lg);
+  z-index: 810;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transform: translateY(-8px) scale(0.96);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+
+.notif-drawer.open {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notif-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notif-drawer-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--md-text-primary);
+}
+
+.notif-clear-btn {
+  background: none;
+  border: none;
+  color: var(--md-accent-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.notif-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--md-surface-2);
+  border: 1px solid var(--md-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.15s ease;
+}
+
+.notif-card:hover {
+  background: var(--md-surface-3);
+}
+
+.notif-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notif-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--md-text-primary);
+}
+
+.notif-card-time {
+  font-size: 11px;
+  color: var(--md-text-muted);
+}
+
+.notif-card-msg {
+  font-size: 12px;
+  color: var(--md-text-secondary);
+  line-height: 1.4;
+}
+
+/* Modals & Dialogs Base */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-panel {
+  background: var(--md-surface-1);
+  border: 1px solid var(--md-border-strong);
+  border-radius: 24px;
+  box-shadow: var(--md-shadow-lg);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  transform: scale(0.94);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-backdrop.active .modal-panel {
+  transform: scale(1);
+}
+
+/* -------------------------------------------------------------
+   Mobile Detail View Floating Back Button
+   ------------------------------------------------------------- */
+.mobile-back-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--md-text-primary);
+  color: var(--md-bg-base);
+  font-size: 22px;
+  font-weight: bold;
+  border: 2px solid var(--md-border-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-back-btn:active {
+  transform: scale(0.9);
+}
+
+/* Hide navigation island in mobile view when on note editor detail view or gallery detail */
+body.sim-mobile[data-active-page="editor"] #nav-island-wrapper,
+body.sim-mobile[data-gallery-modal="true"] #nav-island-wrapper {
+  display: none !important;
+}
+
+@media (max-width: 600px) {
+  body[data-active-page="editor"] #nav-island-wrapper,
+  body[data-gallery-modal="true"] #nav-island-wrapper {
+    display: none !important;
+  }
+}

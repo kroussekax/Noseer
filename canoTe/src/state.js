@@ -2,18 +2,51 @@
  * Central State Management
  * Simple object holding application state with listener subscriptions.
  */
+import { setPreference } from './utils/preferences.js';
 
 export const state = {
   currentRoute: window.location.pathname || '/',
   previousRoute: '/',
+
+  // Authentication
+  user: null,             // { id, email } or null
+  authLoading: true,      // true on initial boot check
+
+  // Notes hierarchy
+  notebooks: [],
+  currentNotebook: null,  // { id, name, description, chapters }
+  currentChapter: null,   // { id, name, notebook_id, pages }
+  currentPage: null,      // { id, title, content, chapter_id, uploads }
+  notebooksLoading: false,
+
+  // Editor save status
+  saveStatus: 'saved',    // 'saved' | 'saving' | 'unsaved' | 'failed'
+
+  // Card demo fallback (preserved)
   cardOneActive: false,
   cardTwoValue: 1420.50,
+
+  // Search
   searchOpen: false,
   searchTerm: '',
+
+  // Camera
   camera: {
     flashing: false,
     captureCount: 0,
+    streaming: false,
+    loading: false,
+    error: null,
+    facingMode: 'environment',
+    lastCapturedPhoto: null,
+    capturedPhotos: [],
+    uploading: false,
+    aiAnalyzing: false,
+    aiResult: null,
+    aiError: null,
   },
+
+  // Settings
   settings: {
     modes: ['DARK', 'LIGHT', 'OLED'],
     modeIndex: 0,
@@ -48,26 +81,22 @@ export function setRoute(path) {
 }
 
 export function goBack() {
-  if (window.history.length > 1 && state.previousRoute) {
+  if (window.history.length > 1 && state.previousRoute && state.previousRoute !== state.currentRoute) {
     const target = state.previousRoute;
     state.previousRoute = state.currentRoute;
     state.currentRoute = target;
     window.history.pushState({}, '', target);
     notify();
   } else {
-    setRoute('/');
+    // Default fallback based on hierarchy
+    if (state.currentPage) {
+      setRoute(`/notebooks/${state.currentNotebook?.id || ''}/chapters/${state.currentChapter?.id || ''}`);
+    } else if (state.currentChapter) {
+      setRoute(`/notebooks/${state.currentNotebook?.id || ''}`);
+    } else {
+      setRoute('/');
+    }
   }
-}
-
-// Tactile card actions
-export function toggleCardOne() {
-  state.cardOneActive = !state.cardOneActive;
-  notify();
-}
-
-export function bumpCardTwoMetrics() {
-  state.cardTwoValue = Number((state.cardTwoValue + 120.25).toFixed(2));
-  notify();
 }
 
 // Search actions
@@ -98,28 +127,40 @@ export function triggerShutter() {
   }, 120);
 }
 
+export function deletePhoto(id) {
+  state.camera.capturedPhotos = state.camera.capturedPhotos.filter(p => p.id !== id);
+  if (state.camera.lastCapturedPhoto && !state.camera.capturedPhotos.some(p => p.url === state.camera.lastCapturedPhoto)) {
+    state.camera.lastCapturedPhoto = state.camera.capturedPhotos.length > 0 ? state.camera.capturedPhotos[0].url : null;
+  }
+  notify();
+}
+
+export function clearAllPhotos() {
+  state.camera.capturedPhotos = [];
+  state.camera.lastCapturedPhoto = null;
+  notify();
+}
+
 // Settings actions
 export function nextMode() {
-  state.settings.modeIndex = (state.settings.modeIndex + 1) % state.settings.modes.length;
-  notify();
+  const next = (state.settings.modeIndex + 1) % state.settings.modes.length;
+  setPreference('modeIndex', next);
 }
 
 export function nextTone() {
-  state.settings.toneIndex = (state.settings.toneIndex + 1) % state.settings.tones.length;
-  notify();
+  const next = (state.settings.toneIndex + 1) % state.settings.tones.length;
+  setPreference('toneIndex', next);
 }
 
 export function nextRatio() {
-  state.settings.ratioIndex = (state.settings.ratioIndex + 1) % state.settings.ratios.length;
-  notify();
+  const next = (state.settings.ratioIndex + 1) % state.settings.ratios.length;
+  setPreference('ratioIndex', next);
 }
 
 export function toggleHaptics() {
-  state.settings.hapticOn = !state.settings.hapticOn;
-  notify();
+  setPreference('hapticOn', !state.settings.hapticOn);
 }
 
 export function togglePrivacy() {
-  state.settings.privacyOn = !state.settings.privacyOn;
-  notify();
+  setPreference('privacyOn', !state.settings.privacyOn);
 }

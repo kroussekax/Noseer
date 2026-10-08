@@ -1,11 +1,29 @@
 /**
  * Header Component
- * Displays top navigation icons (Alerts, Settings) and title decoration.
+ * Displays top navigation icons (Alerts, Settings, User status) and title decoration.
  */
+import { state } from '../state.js';
 
 export function renderHeader(title, showSettingsActive = false) {
+  const user = state?.user;
+
   return `
     <header class="fixed top-0 left-0 w-full z-40 pt-safe pointer-events-none">
+      ${user ? `
+        <div class="absolute top-2 left-4 pointer-events-auto flex items-center gap-2 text-outline font-label-sm text-[10px]">
+          <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+          <span class="max-w-[110px] truncate uppercase font-semibold text-on-surface-variant">${user.email.split('@')[0]}</span>
+          <button 
+            id="btn-logout" 
+            title="Log out" 
+            type="button"
+            class="hover:text-error transition-colors p-0.5 text-outline-variant hover:text-error"
+          >
+            <span class="material-symbols-outlined text-[15px]">logout</span>
+          </button>
+        </div>
+      ` : ''}
+
       <div class="absolute top-2 right-4 pointer-events-auto flex items-center gap-3 text-on-surface/80">
         <a 
           data-link

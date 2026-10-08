@@ -1,0 +1,16 @@
+:3001 {
+    # API routes
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    # Upload routes
+    handle /uploads/* {
+        reverse_proxy api:8000
+    }
+
+    # Frontend (SPA) - proxy to Nginx in the frontend container
+    handle {
+        reverse_proxy frontend:80
+    }
+}

@@ -1,0 +1,187 @@
+/* Noseer Fluid & 3D Physical Animations */
+
+/* Watery Glossy Search Deformation Animation */
+.search-morph-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.search-morph-overlay.active {
+  pointer-events: auto;
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Floating animated search element that transforms */
+.watery-search-container {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--md-glass-bg);
+  border: 1px solid var(--md-glass-border);
+  box-shadow: var(--md-shadow-md), 0 0 0 1px var(--md-accent-border);
+  backdrop-filter: var(--md-glass-blur);
+  -webkit-backdrop-filter: var(--md-glass-blur);
+  overflow: hidden;
+  will-change: transform, width, height, border-radius, opacity;
+  transition: transform 0.65s cubic-bezier(0.34, 1.25, 0.64, 1),
+              width 0.65s cubic-bezier(0.34, 1.25, 0.64, 1),
+              height 0.65s cubic-bezier(0.34, 1.25, 0.64, 1),
+              border-radius 0.65s cubic-bezier(0.34, 1.25, 0.64, 1),
+              box-shadow 0.4s ease;
+}
+
+/* Watery / liquid droplet wobble during flight */
+@keyframes waterBlobMorph {
+  0% {
+    border-radius: 50%;
+    transform: scale(1, 1) rotate(0deg);
+  }
+  25% {
+    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+    transform: scale(1.15, 0.88) rotate(-4deg);
+  }
+  50% {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    transform: scale(0.92, 1.12) rotate(3deg);
+  }
+  75% {
+    border-radius: 48% 52% 56% 44% / 40% 50% 50% 60%;
+    transform: scale(1.08, 0.96) rotate(-1deg);
+  }
+  100% {
+    border-radius: 28px;
+    transform: scale(1, 1) rotate(0deg);
+  }
+}
+
+.watery-search-container.animating {
+  animation: waterBlobMorph 0.75s ease-in-out;
+}
+
+/* Glossy highlight line over the watery bubble */
+.watery-search-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%);
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Sticker Peeling 3D Animation */
+.sticker-peelable {
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 1200px;
+  cursor: pointer;
+  transition: transform 0.25s var(--anim-ease-standard), box-shadow 0.25s ease;
+}
+
+.sticker-peelable:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--md-shadow-md);
+}
+
+/* Peel effect applied on click when Over-The-Top animations are enabled */
+@keyframes stickerPeel3D {
+  0% {
+    transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0);
+    box-shadow: var(--md-shadow-sm);
+  }
+  35% {
+    transform: perspective(1000px) rotateX(12deg) rotateY(-18deg) rotateZ(3deg) translateZ(30px) translateY(-10px);
+    box-shadow: -15px 25px 35px rgba(0, 0, 0, 0.5), 0 0 20px var(--md-accent-glow);
+  }
+  70% {
+    transform: perspective(1000px) rotateX(24deg) rotateY(-36deg) rotateZ(6deg) translateZ(60px) translateY(-25px);
+    opacity: 0.75;
+  }
+  100% {
+    transform: perspective(1000px) rotateX(40deg) rotateY(-50deg) rotateZ(10deg) translateZ(100px) translateY(-50px);
+    opacity: 0;
+  }
+}
+
+.sticker-peeling {
+  animation: stickerPeel3D 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  pointer-events: none;
+}
+
+/* Specular curl highlight corner */
+.sticker-peelable::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.15) 50%);
+  border-radius: 0 0 16px 0;
+  opacity: 0.7;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.sticker-peelable:hover::after {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, transparent 40%, var(--md-accent-glow) 40%, rgba(255, 255, 255, 0.4) 60%);
+}
+
+/* Clean quick transition when Over-the-top animations are disabled */
+.no-ott .sticker-peeling {
+  animation: simpleFadeOut 0.18s ease-out forwards !important;
+}
+
+@keyframes simpleFadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+/* Camera Shutter Flash Animation */
+@keyframes cameraShutterFlash {
+  0% { opacity: 0; }
+  20% { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+
+.camera-flash-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: #ffffff;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+}
+
+.camera-flash-overlay.flashing {
+  animation: cameraShutterFlash 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+/* Subtle Pulse Glow */
+@keyframes subtlePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+    filter: drop-shadow(0 0 8px var(--md-accent-primary));
+  }
+}
+
+.pulse-badge {
+  animation: subtlePulse 2.4s infinite ease-in-out;
+}

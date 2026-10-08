@@ -1,12 +1,488 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blank Page</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<title>Noseer — Minimalist AI Camera Note-Taking</title>
+
+	<!-- CSS Stylesheets -->
+	<link rel="stylesheet" href="style/theme.css">
+	<link rel="stylesheet" href="style/animations.css">
 	<link rel="stylesheet" href="style/main.css">
+	<link rel="stylesheet" href="style/pages.css">
+	<link rel="stylesheet" href="style/components.css">
 </head>
+
 <body>
-hi
+
+	<div id="app-root">
+
+		<!-- Notification Bar (Top Minimal Header) -->
+		<header class="notifbar">
+			<div class="notifbar-left">
+				<h1 id="top-bar-title" class="top-bar-title">Notes</h1>
+			</div>
+
+			<div class="notifbar-actions">
+				<!-- Notification button with unread alert dot (!) -->
+				<button id="btn-notif-drawer" class="notif-btn" title="Notifications" aria-label="Notifications">
+					!
+					<span id="notif-unread-dot" class="notif-unread-dot"></span>
+				</button>
+				<!-- Settings button (@ symbol at very right) -->
+				<button id="btn-notif-settings" class="notif-btn" title="Settings" aria-label="Settings">
+					@
+				</button>
+			</div>
+		</header>
+
+		<!-- Notification Drawer Flyout -->
+		<div id="notif-drawer-backdrop" class="notif-drawer-backdrop"></div>
+		<div id="notif-drawer" class="notif-drawer">
+			<div class="notif-drawer-header">
+				<div class="notif-drawer-title">Notifications</div>
+				<button id="btn-notif-clear" class="notif-clear-btn">Mark All Read</button>
+			</div>
+			<div id="notif-list-container" class="notif-list">
+				<!-- Rendered via notifications.js -->
+			</div>
+		</div>
+
+		<!-- Main Content Views Container -->
+		<main class="views-container">
+
+			<!-- =========================================================
+           1. NOTES PAGE
+           ========================================================= -->
+			<section id="view-notes" class="app-view active">
+				<div class="page-header" style="display: none;">
+					<div id="notes-breadcrumbs" class="breadcrumbs"></div>
+				</div>
+				<div id="notes-content-grid" class="notes-grid">
+					<!-- Rendered via notes.js -->
+				</div>
+			</section>
+
+			<!-- =========================================================
+           2. CAMERA PAGE
+           ========================================================= -->
+			<section id="view-camera" class="app-view">
+				<div class="camera-container">
+
+					<!-- Top Camera Toolbar (Ratio selector top-middle) -->
+					<div class="camera-top-controls" style="justify-content: center;">
+						<button id="btn-camera-ratio" class="camera-pill-btn" title="Toggle Camera Aspect Ratio">
+							Ratio: Screen
+						</button>
+					</div>
+
+					<!-- Camera Preview Frame with Dynamic Aspect Ratio Matte -->
+					<div id="camera-preview-box" class="camera-preview-box ratio-screen">
+						<video id="camera-video" class="camera-video" playsinline autoplay muted
+							style="display: none;"></video>
+						<img id="camera-fallback-img" class="camera-fallback-img" alt="Camera Viewfinder Preview" />
+					</div>
+
+					<!-- Floating Capture Shutter Button -->
+					<div class="camera-capture-wrapper">
+						<button id="camera-capture-btn" class="camera-capture-btn" title="Capture Note">
+							<div class="camera-capture-inner"></div>
+						</button>
+					</div>
+
+				</div>
+			</section>
+
+			<!-- =========================================================
+           3. NOTE EDITOR PAGE
+           ========================================================= -->
+			<section id="view-editor" class="app-view">
+				<div class="editor-panes-wrapper" style="position: relative; height: 100%;">
+					<!-- Drawing Menu (PC/Tablet mode only - Collapsible in Top Right) -->
+					<div id="editor-drawing-menu" class="drawing-tools-menu">
+						<div class="drawing-menu-header-row">
+							<div class="drawing-tool-header">Pen • Bucket</div>
+							<button id="btn-toggle-drawing-menu" class="drawing-tool-toggle-btn" title="Collapse/Expand Menu">⬆</button>
+						</div>
+						<div class="drawing-tools-content">
+							<div class="drawing-swatches-row">
+								<span class="color-swatch active" data-color="#ef4444" style="background-color: #ef4444;"></span>
+								<span class="color-swatch" data-color="#000000" style="background-color: #000000;"></span>
+								<span class="color-swatch" data-color="#0284c7" style="background-color: #0284c7;"></span>
+								<span class="color-swatch" data-color="#10b981" style="background-color: #10b981;"></span>
+							</div>
+							<div class="drawing-tools-list">
+								<button class="drawing-tool-btn active" data-tool="pen">Pen</button>
+								<button class="drawing-tool-btn" data-tool="eraser">Eraser</button>
+								<button class="drawing-tool-btn" data-tool="line">Line</button>
+								<button class="drawing-tool-btn" data-tool="rect">Rect</button>
+								<button class="drawing-tool-btn" data-tool="etc">etc</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- Center Content Editor Pane -->
+					<section id="editor-content-pane" class="pane-center-editor">
+						<!-- Rendered via editor.js -->
+					</section>
+				</div>
+			</section>
+
+			<!-- =========================================================
+           4. GALLERY PAGE
+           ========================================================= -->
+			<section id="view-gallery" class="app-view">
+				<div id="gallery-content-grid" class="gallery-grid">
+					<!-- Rendered via gallery.js -->
+				</div>
+			</section>
+
+			<!-- =========================================================
+           5. SETTINGS PAGE
+           ========================================================= -->
+			<section id="view-settings" class="app-view">
+				<div class="settings-container">
+					<!-- Device View Group -->
+					<div class="settings-section-card">
+						<div class="settings-section-title">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+								<path d="M19 1H5C3.9 1 3 1.9 3 3v18c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm0 18H5V5h14v14z"/>
+							</svg>
+							Device Simulator
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Simulate Viewport</div>
+								<div class="setting-desc">Switch between PC/Tablet and Mobile viewport modes</div>
+							</div>
+							<div class="device-sim-bar" style="position: static; border-radius: 8px;">
+								<button class="sim-btn active" data-mode="tablet">PC/Tablet</button>
+								<button class="sim-btn" data-mode="mobile">Mobile</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- Appearance Group -->
+					<div class="settings-section-card">
+						<div class="settings-section-title">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+								<path
+									d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
+							</svg>
+							Appearance
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Accent Color</div>
+								<div class="setting-desc">Material tonal variations applied across highlights and camera
+									matte</div>
+							</div>
+							<div id="settings-color-chips" class="accent-chips-grid">
+								<!-- Rendered dynamically -->
+							</div>
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Dark Mode</div>
+								<div class="setting-desc">Almost monochromatic high-contrast dark foundation</div>
+							</div>
+							<label class="toggle-switch">
+								<input type="checkbox" id="settings-toggle-theme" checked>
+								<span class="toggle-slider"></span>
+							</label>
+						</div>
+					</div>
+
+					<!-- Camera Settings Group -->
+					<div class="settings-section-card">
+						<div class="settings-section-title">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+								<path
+									d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" />
+							</svg>
+							Camera
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Camera Aspect Ratio</div>
+								<div class="setting-desc">Surrounds non-matching frames with an accent-derived dark
+									matte</div>
+							</div>
+							<select id="settings-select-ratio" class="tool-select" style="width: 140px;">
+								<option value="screen">Screen Match</option>
+								<option value="4:3">4:3 Ratio</option>
+								<option value="16:9">16:9 Ratio</option>
+								<option value="1:1">1:1 Square</option>
+							</select>
+						</div>
+					</div>
+
+					<!-- Animation Settings Group -->
+					<div class="settings-section-card">
+						<div class="settings-section-title">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+								<path
+									d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
+							</svg>
+							Animation
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Over-the-Top Animations</div>
+								<div class="setting-desc">Fluid watery search deformation and 3D sticker peeling effects
+								</div>
+							</div>
+							<label class="toggle-switch">
+								<input type="checkbox" id="settings-toggle-ott" checked>
+								<span class="toggle-slider"></span>
+							</label>
+						</div>
+					</div>
+
+					<!-- AI & OCR Engine Settings Group -->
+					<div class="settings-section-card">
+						<div class="settings-section-title">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+								<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1a2 2 0 0 0 2 2v1.93zm6.9-2.54A9.95 9.95 0 0 0 20 12a9.94 9.94 0 0 0-4.05-8.08V5a2 2 0 0 1-2 2h-2v2a1 1 0 0 1-1 1H8v2h2a1 1 0 0 1 1 1v3h1a2 2 0 0 1 2 2v.8a8.03 8.03 0 0 0 5.9-3.41z"/>
+							</svg>
+							AI &amp; OCR Engine
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Processing Mode</div>
+								<div class="setting-desc">Built-in smart OCR (Zero tokens) or Google Gemini Vision</div>
+							</div>
+							<select id="settings-ai-mode" class="tool-select" style="width: 175px;">
+								<option value="smart">Built-in OCR (No key)</option>
+								<option value="gemini">Gemini 1.5 Flash Vision</option>
+							</select>
+						</div>
+
+						<div id="settings-gemini-key-row" class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+							<div class="setting-label-col" style="width: 100%;">
+								<div class="setting-name">Gemini API Key (Optional)</div>
+								<div class="setting-desc">Get a 100% free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--md-accent-primary);">Google AI Studio</a> (no credit card needed)</div>
+							</div>
+							<input type="password" id="settings-gemini-key" class="tool-input" placeholder="Paste AIzaSy... key here" style="width: 100%; font-family: monospace;">
+						</div>
+					</div>
+
+					<!-- Temporary QR Pairing Group -->
+					<div class="settings-section-card">
+						<div class="settings-section-title">
+							<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+								<path
+									d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z" />
+							</svg>
+							Device Synchronization
+						</div>
+
+						<div class="setting-row">
+							<div class="setting-label-col">
+								<div class="setting-name">Temporary QR Session</div>
+								<div class="setting-desc">Connect phone to desktop for session-only editing and transfer
+								</div>
+							</div>
+							<button id="settings-btn-pairing" class="btn-primary"
+								style="padding: 8px 16px; font-size: 13px;">
+								Show QR Code
+							</button>
+						</div>
+					</div>
+				</div>
+			</section>
+
+		</main>
+
+		<!-- =========================================================
+         Floating Navigation Island (Persistent across app)
+         ========================================================= -->
+		<div id="nav-island-wrapper" class="nav-island-wrapper">
+			<div class="island-main">
+				<!-- Notes Button -->
+				<button id="nav-btn-notes" class="island-btn active" title="Notes">
+					<svg viewBox="0 0 24 24">
+						<path
+							d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
+					</svg>
+					<span>Notes</span>
+					<span class="nav-dot-active"></span>
+				</button>
+
+				<!-- Camera Button -->
+				<button id="nav-btn-camera" class="island-btn" title="Camera">
+					<svg viewBox="0 0 24 24">
+						<circle cx="12" cy="12" r="3.2" />
+						<path
+							d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" />
+					</svg>
+					<span>Camera</span>
+					<span class="nav-dot-active"></span>
+				</button>
+
+				<!-- Gallery Button -->
+				<button id="nav-btn-gallery" class="island-btn" title="Gallery">
+					<svg viewBox="0 0 24 24">
+						<path
+							d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z" />
+					</svg>
+					<span>Gallery</span>
+					<span class="nav-dot-active"></span>
+				</button>
+			</div>
+
+			<!-- Small Separator Dot -->
+			<div class="island-separator"></div>
+
+			<!-- Separated Search Button -->
+			<button id="nav-btn-search" class="island-search-btn" title="Search Notes (S)">
+				<svg viewBox="0 0 24 24">
+					<path
+						d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+				</svg>
+			</button>
+		</div>
+
+		<!-- Mobile Detail View Back Button (Replaces island on mobile detail view) -->
+		<button id="mobile-back-btn" class="mobile-back-btn" title="Back" style="display: none;">
+			➔
+		</button>
+
+	</div><!-- /#app-root -->
+
+	<!-- =========================================================
+       Fluid Watery Search Morph Elements
+       ========================================================= -->
+	<div id="search-overlay" class="search-morph-overlay">
+		<div id="search-morph-box" class="watery-search-container" style="display: none;">
+			<div style="width: 100%; display: flex; flex-direction: column; height: 100%;">
+				<div style="display: flex; align-items: center; width: 100%; padding: 0 16px; height: 52px; gap: 10px;">
+					<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"
+						style="color: var(--md-accent-primary);">
+						<path
+							d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+					</svg>
+					<input id="search-input" type="text" placeholder="Search notes, subjects, math, or receipts..."
+						style="flex: 1; background: transparent; border: none; outline: none; color: var(--md-text-primary); font-size: 15px; font-family: inherit;">
+					<button id="btn-search-close"
+						style="background: none; border: none; color: var(--md-text-muted); cursor: pointer; padding: 4px; font-size: 16px;">✕</button>
+				</div>
+				<div id="search-results-list" style="max-height: 280px; overflow-y: auto; padding: 0 10px 10px;">
+					<!-- Results injected via search.js -->
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Camera Shutter Flash Overlay -->
+	<div id="camera-flash-overlay" class="camera-flash-overlay"></div>
+
+	<!-- =========================================================
+       AI Processing Pipeline Modal Visualizer
+       ========================================================= -->
+	<div id="pipeline-modal" class="pipeline-overlay">
+		<div class="pipeline-card">
+			<div class="pipeline-header">
+				<div class="pipeline-spinner"></div>
+				<div>
+					<div class="pipeline-title">AI Processing Pipeline</div>
+					<div style="font-size: 12px; color: var(--md-text-muted);">Extracting structured note from camera
+						capture...</div>
+				</div>
+			</div>
+			<div id="pipeline-steps-container" class="pipeline-steps-list">
+				<!-- Rendered via pipeline.js -->
+			</div>
+		</div>
+	</div>
+
+	<!-- =========================================================
+       Temporary QR Session Pairing Modal
+       ========================================================= -->
+	<div id="qr-sync-modal" class="modal-backdrop">
+		<div class="modal-panel">
+			<div class="qr-modal-content">
+				<h2 style="font-family: var(--font-display); font-size: 20px;">Temporary Session Pairing</h2>
+				<p style="font-size: 13px; color: var(--md-text-secondary); line-height: 1.4;">
+					Scan this temporary QR code with your mobile device. Devices are connected for <strong>this tab
+						session only</strong> and disconnect automatically when closed.
+				</p>
+				<div class="qr-canvas-box">
+					<canvas id="qr-canvas"></canvas>
+				</div>
+				<div id="qr-session-token" class="qr-token-pill">Session: NS-7839</div>
+				<div id="qr-session-status" class="qr-status-indicator">
+					Waiting for mobile camera to scan...
+				</div>
+				<div class="qr-actions-row">
+					<button id="btn-qr-simulate-scan" class="btn-primary">
+						📱 Simulate Scan &amp; Pair
+					</button>
+					<button id="btn-qr-transfer" class="btn-primary" style="display: none;">
+						📤 Transfer Note
+					</button>
+					<button id="btn-qr-disconnect" class="btn-secondary" style="display: none;">
+						Disconnect
+					</button>
+				</div>
+				<button id="btn-qr-close" class="btn-secondary" style="width: 100%;">Close</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- =========================================================
+       Gallery Image Detail & Reprocess Modal
+       ========================================================= -->
+	<div id="gallery-detail-modal" class="modal-backdrop">
+		<div class="modal-panel" style="max-width: 600px;">
+			<div style="display: flex; flex-direction: column; gap: 14px;">
+				<div
+					style="position: relative; width: 100%; height: 320px; background: #000; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+					<img id="gallery-modal-img" src="" alt="Captured Image Detail"
+						style="max-width: 100%; max-height: 100%; object-fit: contain;">
+				</div>
+				<div>
+					<h3 id="gallery-modal-title" style="font-family: var(--font-display); font-size: 18px;">Image Title
+					</h3>
+					<p id="gallery-modal-meta" style="font-size: 12px; color: var(--md-text-muted); margin-top: 4px;">
+						Metadata</p>
+				</div>
+				<div style="display: flex; gap: 10px;">
+					<button id="gallery-btn-open-note" class="btn-primary">Open Note</button>
+					<button id="gallery-btn-reprocess" class="btn-secondary">Reprocess with AI</button>
+					<button id="gallery-btn-delete" class="btn-secondary" style="color: #ef4444;">Delete</button>
+				</div>
+				<button id="gallery-btn-close-modal" class="btn-secondary">Close</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- External Libraries -->
+	<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+	<!-- Scripts -->
+	<script src="js/qrcode.js"></script>
+	<script src="js/store.js"></script>
+	<script src="js/theme.js"></script>
+	<script src="js/notifications.js"></script>
+	<script src="js/navigation.js"></script>
+	<script src="js/search.js"></script>
+	<script src="js/camera.js"></script>
+	<script src="js/pipeline.js"></script>
+	<script src="js/notes.js"></script>
+	<script src="js/editor.js"></script>
+	<script src="js/gallery.js"></script>
+	<script src="js/sync.js"></script>
+	<script src="js/settings.js"></script>
+	<script src="js/app.js"></script>
+
 </body>
+
 </html>
