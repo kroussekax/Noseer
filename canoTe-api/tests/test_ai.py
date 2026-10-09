@@ -281,12 +281,15 @@ def test_openrouter_rate_limit_maps_to_429(monkeypatch):
     from app.services.ai import AIServiceError
     from app.services.openrouter import OpenRouterService
 
+    calls = {"posts": 0, "sleeps": []}
+
     class Fake429Response:
         status_code = 429
         text = "rate limited"
+        headers = {}
 
         def json(self):
-            return {}
+            return {"error": {"message": "rate limited", "code": 429}}
 
     class FakeAsyncClient:
         def __init__(self, *args, **kwargs):
@@ -299,10 +302,11 @@ def test_openrouter_rate_limit_maps_to_429(monkeypatch):
             return False
 
         async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
             return Fake429Response()
 
     async def fake_sleep(seconds):
-        pass
+        calls["sleeps"].append(seconds)
 
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
@@ -315,6 +319,132 @@ def test_openrouter_rate_limit_maps_to_429(monkeypatch):
         )
     assert exc.value.status_code == 429
     assert "test-key" not in str(exc.value)
+    # Bounded retries with exponential backoff (never indefinite, never immediate)
+    assert calls["posts"] == 3
+    assert calls["sleeps"] == [2.0, 4.0]
+
+
+def test_openrouter_respects_retry_after_header(monkeypatch):
+    """A 429 with Retry-After: 20 waits 20s (capped at 30s) before retrying."""
+    import asyncio
+    from app.config import settings
+    from app.services import openrouter as openrouter_module
+    from app.services.openrouter import OpenRouterService
+
+    calls = {"posts": 0, "sleeps": []}
+
+    class Fake429Response:
+        status_code = 429
+        text = "rate limited"
+        headers = {"retry-after": "20", "x-ratelimit-remaining-requests": "0"}
+
+        def json(self):
+            return {
+                "error": {
+                    "message": "rate limited",
+                    "code": 429,
+                    "metadata": {"limit_source": "upstream_provider_shared_pool"},
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
+            if calls["posts"] < 3:
+                return Fake429Response()
+            # Succeed on final attempt
+            import json as _json
+
+            class Ok:
+                status_code = 200
+                headers = {}
+
+                def json(self):
+                    return {
+                        "choices": [
+                            {"message": {"content": _json.dumps({"title": "ok"})}}
+                        ]
+                    }
+
+            return Ok()
+
+    async def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+
+    svc = OpenRouterService()
+    result = asyncio.run(
+        svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
+    )
+    assert result["title"] == "ok"
+    assert calls["sleeps"] == [20.0, 20.0]
+
+
+def test_openrouter_fails_fast_on_long_retry_after(monkeypatch):
+    """Retry-After beyond the 30s cap fails immediately instead of hanging."""
+    import asyncio
+    from app.config import settings
+    from app.services import openrouter as openrouter_module
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    calls = {"posts": 0, "sleeps": []}
+
+    class Fake429Response:
+        status_code = 429
+        text = "rate limited"
+        headers = {"retry-after": "120"}
+
+        def json(self):
+            return {
+                "error": {
+                    "message": "rate limited upstream",
+                    "metadata": {"limit_source": "upstream_provider_shared_pool"},
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
+            return Fake429Response()
+
+    async def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+
+    svc = OpenRouterService()
+    with pytest.raises(AIServiceError) as exc:
+        asyncio.run(
+            svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
+        )
+    assert exc.value.status_code == 429
+    assert "shared" in str(exc.value).lower()  # tells the user it's pool capacity
+    assert calls["posts"] == 1  # no pointless retries
+    assert calls["sleeps"] == []
 
 
 def test_openrouter_malformed_json_maps_to_error(monkeypatch):
