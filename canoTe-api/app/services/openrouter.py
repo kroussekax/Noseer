@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 
 import httpx
 
@@ -18,6 +19,27 @@ logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {429, 500, 502, 503, 529}
 MAX_ATTEMPTS = 3
 BASE_BACKOFF_SECONDS = 2.0
+
+_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+
+
+def _parse_model_json(content: str):
+    """
+    Parse JSON out of raw model output.
+
+    Tolerates common VLM quirks:
+    - markdown code fences (```json ... ```)
+    - a single-element array wrapping the object ([{...}])
+    """
+    text = content.strip()
+    fenced = _FENCE_RE.search(text)
+    if fenced:
+        text = fenced.group(1)
+    result = json.loads(text)
+    # Some models wrap the result in a one-element array
+    while isinstance(result, list) and len(result) == 1:
+        result = result[0]
+    return result
 
 
 class OpenRouterService(AIService):
@@ -117,12 +139,20 @@ Return ONLY valid JSON. No markdown, no explanation."""
         try:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
-            result = json.loads(content)
+            result = _parse_model_json(content)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
             logger.error(f"Failed to parse OpenRouter response: {e}")
             raise AIServiceError(
                 "AI service returned an invalid response. Please try again."
             ) from e
+
+        if not isinstance(result, dict):
+            logger.error(
+                f"OpenRouter response is not a JSON object: {type(result).__name__}"
+            )
+            raise AIServiceError(
+                "AI service returned an invalid response. Please try again."
+            )
 
         return result
 

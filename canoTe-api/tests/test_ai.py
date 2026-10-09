@@ -353,6 +353,73 @@ def test_openrouter_malformed_json_maps_to_error(monkeypatch):
         )
 
 
+def _run_with_content(monkeypatch, content: str) -> dict:
+    """Run analyze_note with a fake OpenRouter reply whose message content is `content`."""
+    import asyncio
+    from app.config import settings
+    from app.services.openrouter import OpenRouterService
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": content}}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+
+    svc = OpenRouterService()
+    return asyncio.run(
+        svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
+    )
+
+
+def test_openrouter_unwraps_single_element_array(monkeypatch):
+    """A model that replies [{...}] instead of {...} is normalized to a dict."""
+    import json as _json
+
+    result = _run_with_content(monkeypatch, _json.dumps([_valid_vlm_result()]))
+    assert result["title"] == "Newton's Laws"
+    assert result["confidence"] == 0.92
+
+
+def test_openrouter_strips_markdown_fences(monkeypatch):
+    """A model that wraps its JSON in ```json fences still parses."""
+    import json as _json
+
+    content = "```json\n" + _json.dumps(_valid_vlm_result()) + "\n```"
+    result = _run_with_content(monkeypatch, content)
+    assert result["title"] == "Newton's Laws"
+
+
+def test_openrouter_fenced_and_wrapped(monkeypatch):
+    """Fences + single-element array together are still normalized."""
+    import json as _json
+
+    content = "```json\n" + _json.dumps([_valid_vlm_result()]) + "\n```"
+    result = _run_with_content(monkeypatch, content)
+    assert result["suggested_notebook"] == "Physics"
+
+
+def test_openrouter_non_object_json_rejected(monkeypatch):
+    """A JSON payload that isn't an object (e.g. a bare number) is rejected."""
+    with pytest.raises(Exception):
+        _run_with_content(monkeypatch, "[1, 2, 3]")
+
+
 # --- Full pipeline tests (image -> mocked VLM -> validation -> DB) ---
 
 
