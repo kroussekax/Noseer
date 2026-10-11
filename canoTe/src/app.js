@@ -558,10 +558,10 @@ function attachEventListeners() {
     btnQuickRatio.addEventListener('click', () => nextRatio());
   }
 
-  // --- AI Analysis Controls ---
-  const btnAnalyzeAI = document.getElementById('btn-analyze-ai');
-  if (btnAnalyzeAI) {
-    btnAnalyzeAI.addEventListener('click', () => analyzeLastCapture());
+  // --- AI Analysis Controls (analysis runs automatically after capture) ---
+  const btnRetryAI = document.getElementById('btn-retry-ai');
+  if (btnRetryAI) {
+    btnRetryAI.addEventListener('click', () => analyzeLastCapture());
   }
 
   const btnCloseAIModal = document.getElementById('btn-close-ai-modal');

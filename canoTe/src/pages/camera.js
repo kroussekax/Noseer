@@ -91,7 +91,7 @@ export function renderCameraPage(state) {
             <!-- Center Sensor Live Indicator -->
             <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high/70 backdrop-blur-md border border-white/5 font-label-sm text-[10px] tracking-wider text-outline">
               <span class="w-2 h-2 rounded-full ${streaming ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}"></span>
-              <span>${uploading ? 'UPLOADING...' : streaming ? 'LIVE' : 'STANDBY'}</span>
+              <span>${uploading ? 'UPLOADING...' : aiAnalyzing ? 'ANALYZING...' : streaming ? 'LIVE' : 'STANDBY'}</span>
             </div>
 
             <!-- Top Navigation Icons -->
@@ -207,20 +207,7 @@ export function renderCameraPage(state) {
 
             </div>
 
-            <!-- AI Analysis Action -->
-            ${lastCapturedPhoto && !aiAnalyzing ? `
-              <div class="flex justify-center mt-3">
-                <button
-                  id="btn-analyze-ai"
-                  type="button"
-                  class="px-5 py-2.5 rounded-full bg-surface-container-high border border-primary/30 text-primary font-label-md text-xs font-bold tracking-wider uppercase active:scale-95 transition-transform flex items-center gap-2 shadow-md hover:bg-surface-container-highest"
-                >
-                  <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
-                  <span>ANALYZE WITH AI</span>
-                </button>
-              </div>
-            ` : ''}
-
+            <!-- AI Analysis Status -->
             ${aiAnalyzing ? `
               <div class="flex flex-col items-center gap-2 mt-3">
                 <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high/80 border border-primary/20">
@@ -232,9 +219,15 @@ export function renderCameraPage(state) {
 
             ${aiError ? `
               <div class="flex flex-col items-center gap-2 mt-3">
-                <div class="px-4 py-2 rounded-full bg-error/10 border border-error/30">
-                  <span class="font-label-sm text-[10px] text-error tracking-wider">${aiError}</span>
-                </div>
+                <button
+                  id="btn-retry-ai"
+                  type="button"
+                  title="Retry AI analysis"
+                  class="px-4 py-2 rounded-full bg-error/10 border border-error/30 flex items-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <span class="material-symbols-outlined text-[12px] text-error">refresh</span>
+                  <span class="font-label-sm text-[10px] text-error tracking-wider">${aiError} — TAP TO RETRY</span>
+                </button>
               </div>
             ` : ''}
 

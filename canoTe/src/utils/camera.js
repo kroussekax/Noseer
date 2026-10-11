@@ -195,7 +195,8 @@ export async function toggleCameraFacing() {
 }
 
 /**
- * Captures a frame, flashes HUD, triggers audio/haptics, and uploads to server.
+ * Captures a frame, flashes HUD, triggers audio/haptics, uploads to server,
+ * then automatically kicks off AI analysis of the fresh capture.
  */
 export async function captureSnapshot() {
   const videoEl = document.getElementById('camera-stream');
@@ -290,32 +291,41 @@ export async function captureSnapshot() {
       state.camera.uploading = false;
       notify();
     }
+
+    // Auto-process the fresh capture with AI (no manual trigger needed).
+    // Fire-and-forget: the analysis spinner/modal is driven by state.
+    analyzeLastCapture(photoBlob);
   }
 }
 
-/**
- * Analyzes the last captured photo using AI.
- * Shows loading state, then displays the result in a modal.
- */
-export async function analyzeLastCapture() {
-  if (!state.camera.lastCapturedPhoto) return;
+let aiRequestSeq = 0;
 
-  // Get the blob from the last captured photo
-  // We need to fetch the image to get a blob for upload
-  let blob;
-  try {
-    const res = await fetch(state.camera.lastCapturedPhoto);
-    blob = await res.blob();
-  } catch {
-    // If fetch fails, try to get from captured photos data
-    const photo = state.camera.capturedPhotos.find(p => p.url === state.camera.lastCapturedPhoto);
-    if (photo && photo.blob) {
-      blob = photo.blob;
-    } else {
-      state.camera.aiError = 'Could not load image for analysis';
-      notify();
-      return;
+/**
+ * Analyzes a captured photo using AI and shows the result in a modal.
+ * Runs automatically after every capture; can also be retried manually
+ * with an explicit blob. Only the most recent request is allowed to
+ * publish its result (so quick successive captures don't clash).
+ */
+export async function analyzeLastCapture(blobOverride) {
+  const seq = ++aiRequestSeq;
+
+  // Resolve the image bytes: explicit blob first, otherwise fetch the URL
+  let blob = blobOverride || null;
+  if (!blob && state.camera.lastCapturedPhoto) {
+    try {
+      const res = await fetch(state.camera.lastCapturedPhoto);
+      blob = await res.blob();
+    } catch {
+      const photo = state.camera.capturedPhotos.find(p => p.url === state.camera.lastCapturedPhoto);
+      blob = photo?.blob || null;
     }
+  }
+
+  if (!blob) {
+    state.camera.aiAnalyzing = false;
+    state.camera.aiError = 'Could not load image for analysis';
+    notify();
+    return;
   }
 
   state.camera.aiAnalyzing = true;
@@ -325,11 +335,13 @@ export async function analyzeLastCapture() {
 
   try {
     const result = await analyzeImage(blob);
+    if (seq !== aiRequestSeq) return; // superseded by a newer capture
     state.camera.aiResult = result;
     state.camera.aiAnalyzing = false;
     notify();
   } catch (err) {
     console.warn('AI analysis error:', err);
+    if (seq !== aiRequestSeq) return;
     state.camera.aiAnalyzing = false;
     state.camera.aiError = err.message || 'AI analysis failed';
     notify();
