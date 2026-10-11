@@ -1,6 +1,10 @@
 """
 OpenRouter implementation of the AI service.
 Uses OpenRouter's OpenAI-compatible chat completions API.
+
+Supports a model rotation: when the primary model fails (free-tier rate
+limit, provider outage, unusable output), the next model in the list is
+tried automatically.
 """
 import asyncio
 import base64
@@ -17,9 +21,14 @@ logger = logging.getLogger(__name__)
 
 # Transient upstream failures that are worth retrying.
 RETRYABLE_STATUS = {429, 500, 502, 503, 529}
-MAX_ATTEMPTS = 3
+# Small per-model budget: rotation across models matters more than
+# hammering one exhausted free pool.
+MAX_ATTEMPTS_PER_MODEL = 2
 BASE_BACKOFF_SECONDS = 2.0
 MAX_BACKOFF_SECONDS = 30.0
+# Upper bound on cumulative sleeping across ALL models, so one API call
+# never hangs the request for minutes.
+MAX_TOTAL_WAIT = 25.0
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
@@ -87,15 +96,52 @@ def _parse_model_json(content: str):
     return result
 
 
+def _parse_success(response: httpx.Response) -> dict:
+    """Parse a 200 response into the analysis dict, or raise AIServiceError."""
+    try:
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        result = _parse_model_json(content)
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to parse OpenRouter response: {e}")
+        raise AIServiceError(
+            "AI service returned an invalid response. Please try again."
+        ) from e
+
+    if not isinstance(result, dict):
+        logger.error(
+            f"OpenRouter response is not a JSON object: {type(result).__name__}"
+        )
+        raise AIServiceError(
+            "AI service returned an invalid response. Please try again."
+        )
+
+    return result
+
+
 class OpenRouterService(AIService):
-    """AI service backed by OpenRouter's API."""
+    """AI service backed by OpenRouter's API, with automatic model fallback."""
 
     def __init__(self):
         if not settings.OPENROUTER_API_KEY:
             raise RuntimeError("OPENROUTER_API_KEY is not configured")
         self.api_key = settings.OPENROUTER_API_KEY
-        self.model = settings.AI_MODEL
+        self.models = self._parse_models()
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+        # Cumulative sleep across models (see MAX_TOTAL_WAIT)
+        self._used_wait = 0.0
+        self._backoff_step = 0
+
+    @staticmethod
+    def _parse_models() -> list[str]:
+        """Primary AI_MODEL plus AI_FALLBACK_MODELS, in order, deduplicated."""
+        raw = f"{settings.AI_MODEL},{settings.AI_FALLBACK_MODELS}"
+        models: list[str] = []
+        for m in raw.split(","):
+            m = m.strip()
+            if m and m not in models:
+                models.append(m)
+        return models
 
     async def analyze_note(
         self,
@@ -131,8 +177,7 @@ Return ONLY valid JSON. No markdown, no explanation."""
         image_url = f"data:{mime_type};base64,{image_b64}"
 
         # Build request (OpenAI-compatible chat completions format)
-        payload = {
-            "model": self.model,
+        payload: dict = {
             "messages": [
                 {
                     "role": "user",
@@ -153,100 +198,129 @@ Return ONLY valid JSON. No markdown, no explanation."""
             "X-Title": "canoTe",
         }
 
-        response = await self._post_with_retries(payload, headers)
+        last_error: AIServiceError | None = None
 
-        # Map upstream failures to safe, actionable errors
-        if response.status_code in (401, 403):
-            raise AIServiceError(
-                "AI service authentication failed. Check OPENROUTER_API_KEY on the server."
-            )
-        if response.status_code == 402:
-            raise AIServiceError(
-                "AI service credit limit reached. Add credits on OpenRouter or lower max_tokens."
-            )
-        if response.status_code == 429:
-            _, limit_source = _extract_error_details(response)
-            if limit_source == "upstream_provider_shared_pool":
+        for index, model in enumerate(self.models):
+            has_next = index < len(self.models) - 1
+
+            try:
+                response = await self._post_with_retries(model, payload, headers)
+            except AIServiceError as e:
+                # Network failure / timeout after this model's retries
+                last_error = e
+                if has_next:
+                    logger.warning(
+                        f"Model {model} failed ({e}); "
+                        f"falling back to {self.models[index + 1]}"
+                    )
+                    continue
+                raise last_error
+
+            # Account-level failures — the same key is used for every model,
+            # so switching models cannot help. Fail immediately.
+            if response.status_code in (401, 403):
                 raise AIServiceError(
-                    "The AI model's free capacity is temporarily exhausted "
-                    "(shared across all free users). Please wait a minute and "
-                    "try again.",
-                    status_code=429,
+                    "AI service authentication failed. Check OPENROUTER_API_KEY on the server."
                 )
-            raise AIServiceError(
-                "AI service is rate-limited. Please try again shortly.",
+            if response.status_code == 402:
+                raise AIServiceError(
+                    "AI service credit limit reached. Add credits on OpenRouter or lower max_tokens."
+                )
+
+            if response.status_code == 429:
+                _log_failure_details(response)
+                last_error = self._rate_limit_error(response)
+                if has_next:
+                    logger.warning(
+                        f"Model {model} rate-limited; "
+                        f"falling back to {self.models[index + 1]}"
+                    )
+                    continue
+                raise last_error
+
+            if response.status_code != 200:
+                _log_failure_details(response)
+                last_error = AIServiceError(
+                    "AI service is temporarily unavailable. Please try again."
+                )
+                if has_next:
+                    logger.warning(
+                        f"Model {model} returned {response.status_code}; "
+                        f"falling back to {self.models[index + 1]}"
+                    )
+                    continue
+                raise last_error
+
+            # 200 — parse; a different model may format better, so treat
+            # unusable output as fallback-worthy too.
+            try:
+                return _parse_success(response)
+            except AIServiceError as e:
+                last_error = e
+                if has_next:
+                    logger.warning(
+                        f"Model {model} returned unusable output; "
+                        f"falling back to {self.models[index + 1]}"
+                    )
+                    continue
+                raise last_error
+
+        raise last_error or AIServiceError("AI service request failed. Please try again.")
+
+    @staticmethod
+    def _rate_limit_error(response: httpx.Response) -> AIServiceError:
+        _, limit_source = _extract_error_details(response)
+        if limit_source == "upstream_provider_shared_pool":
+            return AIServiceError(
+                "The AI model's free capacity is temporarily exhausted "
+                "(shared across all free users). Please wait a minute and "
+                "try again.",
                 status_code=429,
             )
-        if response.status_code >= 500:
-            raise AIServiceError(
-                "AI service is temporarily unavailable. Please try again."
-            )
-        if response.status_code != 200:
-            logger.error(
-                f"OpenRouter API error: {response.status_code} - {response.text}"
-            )
-            raise AIServiceError(
-                f"AI service returned unexpected status {response.status_code}."
-            )
-
-        # Parse response
-        try:
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-            result = _parse_model_json(content)
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
-            logger.error(f"Failed to parse OpenRouter response: {e}")
-            raise AIServiceError(
-                "AI service returned an invalid response. Please try again."
-            ) from e
-
-        if not isinstance(result, dict):
-            logger.error(
-                f"OpenRouter response is not a JSON object: {type(result).__name__}"
-            )
-            raise AIServiceError(
-                "AI service returned an invalid response. Please try again."
-            )
-
-        return result
+        return AIServiceError(
+            "AI service is rate-limited. Please try again shortly.",
+            status_code=429,
+        )
 
     async def _post_with_retries(
-        self, payload: dict, headers: dict
+        self, model: str, payload: dict, headers: dict
     ) -> httpx.Response:
-        """POST to OpenRouter, retrying transient failures with linear backoff."""
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        """POST one model to OpenRouter, retrying transient failures with backoff."""
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
             try:
                 async with httpx.AsyncClient(timeout=120.0) as client:
                     response = await client.post(
-                        self.base_url, json=payload, headers=headers
+                        self.base_url,
+                        json={**payload, "model": model},
+                        headers=headers,
                     )
             except httpx.TimeoutException as e:
                 logger.warning(
-                    f"OpenRouter request timed out (attempt {attempt}/{MAX_ATTEMPTS})"
+                    f"OpenRouter request timed out for {model} "
+                    f"(attempt {attempt}/{MAX_ATTEMPTS_PER_MODEL})"
                 )
-                if attempt < MAX_ATTEMPTS:
-                    await asyncio.sleep(BASE_BACKOFF_SECONDS * attempt)
+                if attempt < MAX_ATTEMPTS_PER_MODEL and await self._wait_backoff(None):
                     continue
                 raise AIServiceError(
                     "AI service timed out. Please try again.", status_code=504
                 ) from e
             except httpx.HTTPError as e:
                 logger.warning(
-                    f"OpenRouter request failed: {e} (attempt {attempt}/{MAX_ATTEMPTS})"
+                    f"OpenRouter request failed for {model}: {e} "
+                    f"(attempt {attempt}/{MAX_ATTEMPTS_PER_MODEL})"
                 )
-                if attempt < MAX_ATTEMPTS:
-                    await asyncio.sleep(BASE_BACKOFF_SECONDS * attempt)
+                if attempt < MAX_ATTEMPTS_PER_MODEL and await self._wait_backoff(None):
                     continue
                 raise AIServiceError(
                     "Could not reach the AI service. Please try again."
                 ) from e
 
-            if response.status_code in RETRYABLE_STATUS and attempt < MAX_ATTEMPTS:
+            if response.status_code in RETRYABLE_STATUS and attempt < MAX_ATTEMPTS_PER_MODEL:
                 _log_failure_details(response)
                 retry_after = _parse_retry_after(response)
 
                 # A long cool-down is pointless for an interactive request —
-                # fail fast and let the user retry later instead of hanging.
+                # let the caller move on (next model or clear error).
                 if retry_after is not None and retry_after > MAX_BACKOFF_SECONDS:
                     logger.warning(
                         f"OpenRouter {response.status_code} Retry-After="
@@ -255,23 +329,36 @@ Return ONLY valid JSON. No markdown, no explanation."""
                     )
                     return response
 
-                # Respect Retry-After when given, otherwise exponential backoff.
-                delay = (
-                    retry_after
-                    if retry_after is not None
-                    else BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
-                )
-                delay = min(delay, MAX_BACKOFF_SECONDS)
-                logger.warning(
-                    f"OpenRouter returned {response.status_code} "
-                    f"(attempt {attempt}/{MAX_ATTEMPTS}), retrying in {delay:.0f}s"
-                )
-                await asyncio.sleep(delay)
-                continue
+                if not await self._wait_backoff(retry_after):
+                    # Wait budget exhausted — surface this response to the caller
+                    return response
 
-            if response.status_code != 200:
-                _log_failure_details(response)
+                logger.warning(
+                    f"OpenRouter returned {response.status_code} for {model} "
+                    f"(attempt {attempt}/{MAX_ATTEMPTS_PER_MODEL}), retrying"
+                )
+                continue
 
             return response
 
         raise AIServiceError("AI service request failed. Please try again.")
+
+    async def _wait_backoff(self, retry_after: float | None) -> bool:
+        """
+        Sleep for the backoff delay. Returns False (and skips the sleep)
+        when Retry-After is given or the cumulative wait budget is used up.
+        """
+        if retry_after is not None:
+            delay = retry_after
+        else:
+            delay = BASE_BACKOFF_SECONDS * (2 ** self._backoff_step)
+        if self._used_wait + delay > MAX_TOTAL_WAIT:
+            logger.warning(
+                f"Wait budget exhausted ({self._used_wait + delay:.0f}s > "
+                f"{MAX_TOTAL_WAIT:.0f}s), skipping further waits"
+            )
+            return False
+        self._used_wait += delay
+        self._backoff_step += 1
+        await asyncio.sleep(delay)
+        return True

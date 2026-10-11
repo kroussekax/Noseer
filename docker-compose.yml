@@ -29,7 +29,8 @@ services:
       SECURE_COOKIES: ${SECURE_COOKIES:-false}
       UPLOAD_DIR: /uploads
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      AI_MODEL: ${AI_MODEL:-qwen/qwen3.8-27b:free}
+      AI_MODEL: ${AI_MODEL:-google/gemma-4-26b-a4b-it:free}
+      AI_FALLBACK_MODELS: ${AI_FALLBACK_MODELS:-google/gemma-4-31b-it:free,thinkingmachines/inkling:free,thinkingmachines/inkling-small:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free}
     volumes:
       - uploads_data:/uploads
     ports:

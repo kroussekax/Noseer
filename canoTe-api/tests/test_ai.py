@@ -254,6 +254,7 @@ def test_openrouter_request_construction(monkeypatch):
 
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", "")
 
     svc = OpenRouterService()
     result = asyncio.run(
@@ -311,6 +312,7 @@ def test_openrouter_rate_limit_maps_to_429(monkeypatch):
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", "")
 
     svc = OpenRouterService()
     with pytest.raises(AIServiceError) as exc:
@@ -320,8 +322,8 @@ def test_openrouter_rate_limit_maps_to_429(monkeypatch):
     assert exc.value.status_code == 429
     assert "test-key" not in str(exc.value)
     # Bounded retries with exponential backoff (never indefinite, never immediate)
-    assert calls["posts"] == 3
-    assert calls["sleeps"] == [2.0, 4.0]
+    assert calls["posts"] == 2
+    assert calls["sleeps"] == [2.0]
 
 
 def test_openrouter_respects_retry_after_header(monkeypatch):
@@ -359,7 +361,7 @@ def test_openrouter_respects_retry_after_header(monkeypatch):
 
         async def post(self, url, json=None, headers=None):
             calls["posts"] += 1
-            if calls["posts"] < 3:
+            if calls["posts"] < 2:
                 return Fake429Response()
             # Succeed on final attempt
             import json as _json
@@ -383,13 +385,14 @@ def test_openrouter_respects_retry_after_header(monkeypatch):
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", "")
 
     svc = OpenRouterService()
     result = asyncio.run(
         svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
     )
     assert result["title"] == "ok"
-    assert calls["sleeps"] == [20.0, 20.0]
+    assert calls["sleeps"] == [20.0]
 
 
 def test_openrouter_fails_fast_on_long_retry_after(monkeypatch):
@@ -435,6 +438,7 @@ def test_openrouter_fails_fast_on_long_retry_after(monkeypatch):
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", "")
 
     svc = OpenRouterService()
     with pytest.raises(AIServiceError) as exc:
@@ -475,6 +479,7 @@ def test_openrouter_malformed_json_maps_to_error(monkeypatch):
 
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", "")
 
     svc = OpenRouterService()
     with pytest.raises(AIServiceError):
@@ -510,6 +515,7 @@ def _run_with_content(monkeypatch, content: str) -> dict:
 
     monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", "")
 
     svc = OpenRouterService()
     return asyncio.run(
@@ -680,3 +686,222 @@ def test_analyze_without_api_key_returns_503():
     )
     # 503 when unconfigured; 200 if a real key happens to be present in the environment
     assert res.status_code in (503, 200)
+
+
+# --- Model fallback rotation tests ---
+
+
+def _openrouter_settings(monkeypatch, primary: str, fallback: str = ""):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(settings, "AI_MODEL", primary)
+    monkeypatch.setattr(settings, "AI_FALLBACK_MODELS", fallback)
+
+
+def _valid_analysis_content():
+    import json as _json
+
+    return _json.dumps(_valid_vlm_result())
+
+
+def test_models_parsed_and_deduplicated(monkeypatch):
+    """AI_MODEL + AI_FALLBACK_MODELS become an ordered, deduplicated list."""
+    _openrouter_settings(monkeypatch, "model/a:free, model/b:free", "model/b:free, model/c:free")
+
+    from app.services.openrouter import OpenRouterService
+
+    svc = OpenRouterService()
+    assert svc.models == ["model/a:free", "model/b:free", "model/c:free"]
+
+
+def test_falls_back_to_next_model_on_429(monkeypatch):
+    """Rate-limited primary model rotates to the fallback, which succeeds."""
+    import asyncio
+    from app.services import openrouter as openrouter_module
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free")
+
+    calls = {"posts": 0, "models": [], "sleeps": []}
+
+    class Fake429:
+        status_code = 429
+        text = "rate limited"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "rate limited", "metadata": {"limit_source": "upstream_provider_shared_pool"}}}
+
+    class Fake200:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"choices": [{"message": {"content": _valid_analysis_content()}}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
+            calls["models"].append(json["model"])
+            return Fake429() if json["model"] == "model/a:free" else Fake200()
+
+    async def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+
+    svc = OpenRouterService()
+    result = asyncio.run(
+        svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
+    )
+    assert result["title"] == "Newton's Laws"
+    # Primary tried twice (retry), then fallback succeeded on first try
+    assert calls["models"] == ["model/a:free", "model/a:free", "model/b:free"]
+    assert calls["sleeps"] == [2.0]
+
+
+def test_all_models_exhausted_raises_rate_limit(monkeypatch):
+    """When every model is rate-limited, the final 429 surfaces to the client."""
+    import asyncio
+    from app.services import openrouter as openrouter_module
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free")
+
+    calls = {"posts": 0, "sleeps": []}
+
+    class Fake429:
+        status_code = 429
+        text = "rate limited"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "rate limited"}}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
+            return Fake429()
+
+    async def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+
+    svc = OpenRouterService()
+    with pytest.raises(AIServiceError) as exc:
+        asyncio.run(svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", []))
+    assert exc.value.status_code == 429
+    # 2 models x 2 attempts each — bounded, never indefinite
+    assert calls["posts"] == 4
+
+
+def test_account_error_does_not_fall_back(monkeypatch):
+    """401 is account-level: fail immediately without trying other models."""
+    import asyncio
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free")
+
+    calls = {"posts": 0}
+
+    class Fake401:
+        status_code = 401
+        text = "unauthorized"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "User not found."}}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
+            return Fake401()
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+
+    svc = OpenRouterService()
+    with pytest.raises(AIServiceError) as exc:
+        asyncio.run(svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", []))
+    assert "authentication" in str(exc.value).lower()
+    assert calls["posts"] == 1  # one model tried, no pointless fallback
+
+
+def test_wait_budget_bounds_total_runtime(monkeypatch):
+    """Cumulative sleeps across models never exceed MAX_TOTAL_WAIT."""
+    import asyncio
+    from app.services import openrouter as openrouter_module
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free")
+    monkeypatch.setattr(openrouter_module, "MAX_TOTAL_WAIT", 3.0)
+
+    calls = {"posts": 0, "sleeps": []}
+
+    class Fake429:
+        status_code = 429
+        text = "rate limited"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "rate limited"}}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["posts"] += 1
+            return Fake429()
+
+    async def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+
+    svc = OpenRouterService()
+    with pytest.raises(AIServiceError):
+        asyncio.run(svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", []))
+    # Only one 2s wait fits in the 3s budget; everything else fails fast
+    assert calls["sleeps"] == [2.0]
+    assert sum(calls["sleeps"]) <= 3.0
