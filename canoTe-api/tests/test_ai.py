@@ -978,6 +978,91 @@ def test_gated_final_model_surfaces_rate_limit_error(monkeypatch):
     assert "authentication" not in str(exc.value).lower()
 
 
+def test_null_content_falls_back_to_next_model(monkeypatch):
+    """A 200 with null/empty content (reasoning-model quirk) rotates, never crashes."""
+    import asyncio
+    from app.services import openrouter as openrouter_module
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free")
+
+    calls = {"models": []}
+
+    class FakeNullContent:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            # Reasoning model burned all tokens on thinking: content is null
+            return {"choices": [{"message": {"content": None}}]}
+
+    class Fake200:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"choices": [{"message": {"content": _valid_analysis_content()}}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls["models"].append(json["model"])
+            return FakeNullContent() if json["model"] == "model/a:free" else Fake200()
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+
+    svc = OpenRouterService()
+    result = asyncio.run(
+        svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
+    )
+    assert result["title"] == "Newton's Laws"
+    assert calls["models"] == ["model/a:free", "model/b:free"]
+
+
+def test_null_content_single_model_raises_clean_error(monkeypatch):
+    """With no fallback left, null content raises AIServiceError — never AttributeError."""
+    import asyncio
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "")
+
+    class FakeNullContent:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"choices": [{"message": {}}]}  # no content key at all
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            return FakeNullContent()
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+
+    svc = OpenRouterService()
+    with pytest.raises(AIServiceError):
+        asyncio.run(svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", []))
+
+
 def test_wait_budget_bounds_total_runtime(monkeypatch):
     """Cumulative sleeps across models never exceed MAX_TOTAL_WAIT."""
     import asyncio

@@ -101,8 +101,12 @@ def _parse_success(response: httpx.Response) -> dict:
     try:
         data = response.json()
         content = data["choices"][0]["message"]["content"]
+        # Reasoning models sometimes return 200 with null/empty content
+        # (e.g. when all tokens went to reasoning). Treat as unusable.
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("empty or non-string content")
         result = _parse_model_json(content)
-    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as e:
         logger.error(f"Failed to parse OpenRouter response: {e}")
         raise AIServiceError(
             "AI service returned an invalid response. Please try again."

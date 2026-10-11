@@ -64,7 +64,7 @@ AI_MODEL=google/gemma-4-26b-a4b-it:free
 Free models share global capacity pools, so when one is full the API automatically rotates through your fallback list before giving up:
 
 ```env
-AI_FALLBACK_MODELS=google/gemma-4-31b-it:free,thinkingmachines/inkling:free,thinkingmachines/inkling-small:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+AI_FALLBACK_MODELS=google/gemma-4-31b-it:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 ```
 
 Notes:
@@ -177,7 +177,7 @@ SECURE_COOKIES=false
 UPLOAD_DIR=./uploads
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 AI_MODEL=google/gemma-4-26b-a4b-it:free
-AI_FALLBACK_MODELS=google/gemma-4-31b-it:free,thinkingmachines/inkling:free,thinkingmachines/inkling-small:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+AI_FALLBACK_MODELS=google/gemma-4-31b-it:free,dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 ```
 
 Generate the secret:
