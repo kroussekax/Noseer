@@ -541,6 +541,19 @@ def test_openrouter_strips_markdown_fences(monkeypatch):
     assert result["title"] == "Newton's Laws"
 
 
+def test_openrouter_parses_json_after_preamble(monkeypatch):
+    """Chatty models that prefix the JSON ("Sure! Here it is: {...}") still parse."""
+    import json as _json
+
+    content = (
+        "Sure! Here is the analysis you requested:\n"
+        + _json.dumps(_valid_vlm_result())
+    )
+    result = _run_with_content(monkeypatch, content)
+    assert result["title"] == "Newton's Laws"
+    assert result["confidence"] == 0.92
+
+
 def test_openrouter_fenced_and_wrapped(monkeypatch):
     """Fences + single-element array together are still normalized."""
     import json as _json

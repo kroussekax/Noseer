@@ -81,15 +81,36 @@ def _parse_model_json(content: str):
     """
     Parse JSON out of raw model output.
 
-    Tolerates common VLM quirks:
+    Tolerates common VLM quirks, in order:
+    - bare JSON ({"title": ...})
     - markdown code fences (```json ... ```)
+    - a preamble before the JSON ("Sure! Here it is: {...}")
     - a single-element array wrapping the object ([{...}])
     """
     text = content.strip()
-    fenced = _FENCE_RE.search(text)
-    if fenced:
-        text = fenced.group(1)
-    result = json.loads(text)
+
+    # Pure JSON fast path
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError:
+        # Markdown code fence
+        fenced = _FENCE_RE.search(text)
+        if fenced:
+            try:
+                result = json.loads(fenced.group(1))
+            except json.JSONDecodeError:
+                result = None
+        else:
+            result = None
+
+        if result is None:
+            # Last resort: slice from the first { to the last }
+            start = text.find("{")
+            end = text.rfind("}")
+            if start == -1 or end <= start:
+                raise ValueError("no JSON object found in model output")
+            result = json.loads(text[start : end + 1])
+
     # Some models wrap the result in a one-element array
     while isinstance(result, list) and len(result) == 1:
         result = result[0]
@@ -98,6 +119,7 @@ def _parse_model_json(content: str):
 
 def _parse_success(response: httpx.Response) -> dict:
     """Parse a 200 response into the analysis dict, or raise AIServiceError."""
+    content = None
     try:
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -107,7 +129,9 @@ def _parse_success(response: httpx.Response) -> dict:
             raise ValueError("empty or non-string content")
         result = _parse_model_json(content)
     except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as e:
-        logger.error(f"Failed to parse OpenRouter response: {e}")
+        # Short preview only — enough to diagnose, safe for server logs
+        preview = content[:150] if isinstance(content, str) else repr(content)
+        logger.error(f"Failed to parse OpenRouter response: {e}; content preview: {preview!r}")
         raise AIServiceError(
             "AI service returned an invalid response. Please try again."
         ) from e
