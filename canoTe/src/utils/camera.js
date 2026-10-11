@@ -1,6 +1,8 @@
 import { state, notify } from '../state.js';
 import { listGallery } from '../api/uploads.js';
 import { analyzeImage, confirmAnalysis } from '../api/ai.js';
+import { listNotebooks } from '../api/notebooks.js';
+import { listChapters } from '../api/chapters.js';
 import { API_BASE } from '../api/client.js';
 
 let activeStream = null;
@@ -375,19 +377,43 @@ export async function confirmAIAnalysis() {
     };
 
     // Handle notebook
+    let resolvedNotebookId = null;
     if (notebookSelect === '__create__') {
       payload.create_notebook = true;
       payload.notebook_name = aiResult.analysis.suggested_notebook;
-    } else if (notebookSelect) {
-      payload.notebook_id = notebookSelect;
+    } else {
+      // Empty select value = "use AI-suggested existing notebook".
+      // Resolve its name to a real id — the backend needs one or the other.
+      const notebooks = await listNotebooks();
+      const match = notebooks.find((nb) => nb.name === aiResult.analysis.suggested_notebook);
+      if (match) {
+        resolvedNotebookId = match.id;
+        payload.notebook_id = match.id;
+      } else {
+        // Suggested notebook no longer exists — create it instead
+        payload.create_notebook = true;
+        payload.notebook_name = aiResult.analysis.suggested_notebook;
+      }
     }
 
     // Handle chapter
     if (chapterSelect === '__create__') {
       payload.create_chapter = true;
       payload.chapter_name = aiResult.analysis.suggested_chapter || 'AI Generated';
-    } else if (chapterSelect) {
-      payload.chapter_id = chapterSelect;
+    } else {
+      // Empty select value = "use AI-suggested existing chapter" — look it up
+      // inside the resolved notebook; create it if it isn't there.
+      let match = null;
+      if (resolvedNotebookId) {
+        const chapters = await listChapters(resolvedNotebookId);
+        match = chapters.find((ch) => ch.name === aiResult.analysis.suggested_chapter);
+      }
+      if (match) {
+        payload.chapter_id = match.id;
+      } else {
+        payload.create_chapter = true;
+        payload.chapter_name = aiResult.analysis.suggested_chapter || 'AI Generated';
+      }
     }
 
     const page = await confirmAnalysis(payload);
