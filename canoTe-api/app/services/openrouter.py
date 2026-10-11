@@ -199,6 +199,9 @@ Return ONLY valid JSON. No markdown, no explanation."""
         }
 
         last_error: AIServiceError | None = None
+        # Any non-401/403 response proves the key itself is valid, so a later
+        # 401 is model-level gating (BYOK/special access), not a broken key.
+        key_validated = False
 
         for index, model in enumerate(self.models):
             has_next = index < len(self.models) - 1
@@ -216,12 +219,33 @@ Return ONLY valid JSON. No markdown, no explanation."""
                     continue
                 raise last_error
 
-            # Account-level failures — the same key is used for every model,
-            # so switching models cannot help. Fail immediately.
+            if response.status_code not in (401, 403):
+                key_validated = True
+
+            # 401/403 with no prior proof the key works = broken/missing key.
+            # Fail immediately — rotating models cannot fix that.
+            # But if an earlier model authenticated fine (e.g. returned 429),
+            # this 401 is the model rejecting access for this account: skip it.
             if response.status_code in (401, 403):
+                if key_validated and has_next:
+                    _log_failure_details(response)
+                    logger.warning(
+                        f"Model {model} rejected access (401/403) but the API key "
+                        f"is valid — model likely requires special access. "
+                        f"Skipping to {self.models[index + 1]}"
+                    )
+                    continue
+                if key_validated and not has_next:
+                    # Last model gated too — surface the earlier real error
+                    raise last_error or AIServiceError(
+                        "AI service authentication failed. Check OPENROUTER_API_KEY on the server."
+                    )
                 raise AIServiceError(
                     "AI service authentication failed. Check OPENROUTER_API_KEY on the server."
                 )
+
+            # Account-level failures — the same key is used for every model,
+            # so switching models cannot help. Fail immediately.
             if response.status_code == 402:
                 raise AIServiceError(
                     "AI service credit limit reached. Add credits on OpenRouter or lower max_tokens."

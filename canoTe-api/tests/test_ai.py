@@ -859,6 +859,125 @@ def test_account_error_does_not_fall_back(monkeypatch):
     assert calls["posts"] == 1  # one model tried, no pointless fallback
 
 
+def test_gated_model_401_skips_to_next(monkeypatch):
+    """A 401 from one model after the key was proven valid skips that model, not the run."""
+    import asyncio
+    from app.services import openrouter as openrouter_module
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free,model/c:free")
+
+    calls = {"models": [], "sleeps": []}
+
+    class Fake429:
+        status_code = 429
+        text = "rate limited"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "rate limited"}}
+
+    class Fake401:
+        status_code = 401
+        text = "forbidden model"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "This model requires special access"}}
+
+    class Fake200:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"choices": [{"message": {"content": _valid_analysis_content()}}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            model = json["model"]
+            calls["models"].append(model)
+            if model == "model/a:free":
+                return Fake429()  # rate-limited, but proves the key is valid
+            if model == "model/b:free":
+                return Fake401()  # gated model — should be skipped
+            return Fake200()  # model/c works
+
+    async def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+
+    svc = OpenRouterService()
+    result = asyncio.run(
+        svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", [])
+    )
+    assert result["title"] == "Newton's Laws"
+    # a: tried twice (429+retry), b: once (401, skipped immediately), c: once (success)
+    assert calls["models"] == ["model/a:free", "model/a:free", "model/b:free", "model/c:free"]
+
+
+def test_gated_final_model_surfaces_rate_limit_error(monkeypatch):
+    """401 on the last model after a proven key surfaces the real earlier error."""
+    import asyncio
+    from app.services import openrouter as openrouter_module
+    from app.services.ai import AIServiceError
+    from app.services.openrouter import OpenRouterService
+
+    _openrouter_settings(monkeypatch, "model/a:free", "model/b:free")
+
+    class Fake429:
+        status_code = 429
+        text = "rate limited"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "rate limited", "metadata": {"limit_source": "upstream_provider_shared_pool"}}}
+
+    class Fake401:
+        status_code = 401
+        text = "forbidden model"
+        headers = {}
+
+        def json(self):
+            return {"error": {"message": "This model requires special access"}}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            return Fake429() if json["model"] == "model/a:free" else Fake401()
+
+    async def fake_sleep(seconds):
+        pass
+
+    monkeypatch.setattr("app.services.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(openrouter_module.asyncio, "sleep", fake_sleep)
+
+    svc = OpenRouterService()
+    with pytest.raises(AIServiceError) as exc:
+        asyncio.run(svc.analyze_note(b"\xff\xd8\xff" + b"\x00" * 32, "image/jpeg", []))
+    # The rate-limit error (the real problem), not a misleading auth error
+    assert exc.value.status_code == 429
+    assert "authentication" not in str(exc.value).lower()
+
+
 def test_wait_budget_bounds_total_runtime(monkeypatch):
     """Cumulative sleeps across models never exceed MAX_TOTAL_WAIT."""
     import asyncio
