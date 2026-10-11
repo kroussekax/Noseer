@@ -1,3 +1,13 @@
+/**
+ * All colors are backed by CSS variables (RGB triplets) defined in
+ * src/styles/style.css. The variables are swapped per theme:
+ *   html.dark (default) / html.light / html.oled
+ * Accent tones also override --color-primary / --color-on-primary at runtime
+ * (see src/utils/preferences.js). Using `rgb(var(--color-x) / <alpha-value>)`
+ * keeps Tailwind opacity modifiers (e.g. bg-primary/10) working.
+ */
+const color = (name) => `rgb(var(--color-${name}) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
@@ -8,53 +18,59 @@ export default {
   theme: {
     extend: {
       colors: {
-        "error-container": "#93000a",
-        "on-primary-fixed": "#1a1c1d",
-        "surface-container-lowest": "#0e0e10",
-        "secondary": "#c6c5cf",
-        "on-tertiary": "#303037",
-        "surface-container-low": "#1b1b1d",
-        "on-secondary-container": "#bcbbc5",
-        "on-background": "#e5e1e4",
-        "inverse-primary": "#5d5e60",
-        "tertiary-fixed": "#e3e1ea",
-        "surface-container": "#201f21",
-        "secondary-fixed": "#e3e1ec",
-        "secondary-fixed-dim": "#c6c5cf",
-        "surface-tint": "#c6c6c7",
-        "on-primary-fixed-variant": "#454748",
-        "error": "#ffb4ab",
-        "inverse-surface": "#e5e1e4",
-        "on-error-container": "#ffdad6",
-        "surface-dim": "#131315",
-        "background": "#131315",
-        "surface-variant": "#353437",
-        "on-surface": "#e5e1e4",
-        "on-primary": "#2f3132",
-        "on-surface-variant": "#c4c7c9",
-        "on-primary-container": "#636466",
-        "outline-variant": "#444749",
-        "tertiary-container": "#e3e1ea",
-        "primary-fixed": "#e2e2e3",
-        "secondary-container": "#4a4b53",
-        "primary-container": "#e2e2e3",
-        "inverse-on-surface": "#303032",
-        "tertiary": "#ffffff",
-        "on-secondary-fixed-variant": "#46464e",
-        "on-tertiary-fixed": "#1b1b21",
-        "surface-container-highest": "#353437",
-        "on-error": "#690005",
-        "on-tertiary-container": "#64646b",
-        "surface-container-high": "#2a2a2c",
-        "on-tertiary-fixed-variant": "#46464d",
-        "surface-bright": "#39393b",
-        "on-secondary-fixed": "#1a1b22",
-        "primary": "#ffffff",
-        "primary-fixed-dim": "#c6c6c7",
-        "outline": "#8e9193",
-        "tertiary-fixed-dim": "#c7c5ce",
-        "on-secondary": "#2f3038",
-        "surface": "#131315"
+        "primary": color("primary"),
+        "on-primary": color("on-primary"),
+        "primary-container": color("primary-container"),
+        "on-primary-container": color("on-primary-container"),
+        "primary-fixed": color("primary-fixed"),
+        "primary-fixed-dim": color("primary-fixed-dim"),
+        "on-primary-fixed": color("on-primary-fixed"),
+        "on-primary-fixed-variant": color("on-primary-fixed-variant"),
+
+        "secondary": color("secondary"),
+        "on-secondary": color("on-secondary"),
+        "secondary-container": color("secondary-container"),
+        "on-secondary-container": color("on-secondary-container"),
+        "secondary-fixed": color("secondary-fixed"),
+        "secondary-fixed-dim": color("secondary-fixed-dim"),
+        "on-secondary-fixed": color("on-secondary-fixed"),
+        "on-secondary-fixed-variant": color("on-secondary-fixed-variant"),
+
+        "tertiary": color("tertiary"),
+        "on-tertiary": color("on-tertiary"),
+        "tertiary-container": color("tertiary-container"),
+        "on-tertiary-container": color("on-tertiary-container"),
+        "tertiary-fixed": color("tertiary-fixed"),
+        "tertiary-fixed-dim": color("tertiary-fixed-dim"),
+        "on-tertiary-fixed": color("on-tertiary-fixed"),
+        "on-tertiary-fixed-variant": color("on-tertiary-fixed-variant"),
+
+        "error": color("error"),
+        "on-error": color("on-error"),
+        "error-container": color("error-container"),
+        "on-error-container": color("on-error-container"),
+
+        "surface": color("surface"),
+        "surface-dim": color("surface-dim"),
+        "surface-bright": color("surface-bright"),
+        "surface-container-lowest": color("surface-container-lowest"),
+        "surface-container-low": color("surface-container-low"),
+        "surface-container": color("surface-container"),
+        "surface-container-high": color("surface-container-high"),
+        "surface-container-highest": color("surface-container-highest"),
+        "surface-variant": color("surface-variant"),
+        "surface-tint": color("surface-tint"),
+
+        "background": color("background"),
+        "on-surface": color("on-surface"),
+        "on-surface-variant": color("on-surface-variant"),
+        "outline": color("outline"),
+        "outline-variant": color("outline-variant"),
+        "inverse-surface": color("inverse-surface"),
+        "inverse-on-surface": color("inverse-on-surface"),
+        "inverse-primary": color("inverse-primary"),
+
+        "indicator": color("indicator")
       },
       borderRadius: {
         "DEFAULT": "1rem",

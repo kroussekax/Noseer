@@ -10,10 +10,25 @@ export const DEFAULT_PREFS = {
   privacyOn: true,
 };
 
+// Accent tones, expressed as RGB triplets to match the CSS color tokens.
+// Each tone has dark (DARK/OLED) and light (LIGHT) variants so the accent
+// always keeps enough contrast against the active surface palette.
 const TONE_ACCENTS = [
-  { name: 'SLATE', primary: '#ffffff', onPrimary: '#2f3132', indicator: '#94a3b8' },
-  { name: 'MONO',  primary: '#c6c6c7', onPrimary: '#1a1c1d', indicator: '#71717a' },
-  { name: 'INK',   primary: '#e2e2e3', onPrimary: '#0f172a', indicator: '#38bdf8' },
+  {
+    name: 'SLATE',
+    dark:  { primary: '255 255 255', onPrimary: '47 49 50',  indicator: '148 163 184' },
+    light: { primary: '71 75 79',    onPrimary: '255 255 255', indicator: '100 116 139' },
+  },
+  {
+    name: 'MONO',
+    dark:  { primary: '198 198 199', onPrimary: '26 28 29',  indicator: '113 113 122' },
+    light: { primary: '44 44 46',    onPrimary: '255 255 255', indicator: '113 113 122' },
+  },
+  {
+    name: 'INK',
+    dark:  { primary: '226 226 227', onPrimary: '15 23 42',  indicator: '56 189 248' },
+    light: { primary: '15 23 42',    onPrimary: '255 255 255', indicator: '2 132 199' },
+  },
 ];
 
 export function loadPreferences() {
@@ -46,24 +61,18 @@ export function applyPreferences(prefs) {
 
   // 1. Display Mode: DARK (0), LIGHT (1), OLED (2)
   const mode = state.settings.modes[prefs.modeIndex] || 'DARK';
+  const isLight = mode === 'LIGHT';
+
   root.classList.remove('dark', 'light', 'oled');
+  root.classList.add(isLight ? 'light' : 'dark');
+  if (mode === 'OLED') root.classList.add('oled');
 
-  if (mode === 'LIGHT') {
-    root.classList.add('light');
-    document.body.style.backgroundColor = '#f4f4f5';
-  } else if (mode === 'OLED') {
-    root.classList.add('dark', 'oled');
-    document.body.style.backgroundColor = '#000000';
-  } else {
-    root.classList.add('dark');
-    document.body.style.backgroundColor = '#131315';
-  }
-
-  // 2. Accent Tone
+  // 2. Accent Tone -> color tokens consumed by Tailwind utilities
   const tone = TONE_ACCENTS[prefs.toneIndex] || TONE_ACCENTS[0];
-  root.style.setProperty('--accent-primary', tone.primary);
-  root.style.setProperty('--accent-on-primary', tone.onPrimary);
-  root.style.setProperty('--accent-indicator', tone.indicator);
+  const accent = (isLight ? tone.light : tone.dark) || tone.dark;
+  root.style.setProperty('--color-primary', accent.primary);
+  root.style.setProperty('--color-on-primary', accent.onPrimary);
+  root.style.setProperty('--color-indicator', accent.indicator);
 }
 
 export function setPreference(key, value) {
